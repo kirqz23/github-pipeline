@@ -105,3 +105,5 @@ commits = repo.get_commits(
 # returns from the most recent
 for commit in commits:
     print(commit)
+    print(commit.commit.author.date)
+    print(_get_file_content(repo, GITHUB_FILE, commit.sha))
