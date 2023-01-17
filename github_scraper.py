@@ -2,15 +2,15 @@
 
 import base64
 import hashlib
+import json
 import logging
 import os
 import time
-import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from json.decoder import JSONDecodeError
 from typing import Dict, List
-import pandas as pd
 
+import pandas as pd
 from dotenv import load_dotenv
 from github import Github, GithubObject
 from github.GitBlob import GitBlob
@@ -30,6 +30,7 @@ GITHUB_REPO = os.getenv("GITHUB_REPO")
 DEFAULT_RETRY_COUNT = 100
 DEFAULT_RETRY_SEC = 5
 MAIN_BRANCH = "master"
+
 
 def _get_repo(repo_name: str) -> Repository:
     """Get github repository"""
@@ -77,7 +78,7 @@ def _get_file_content(
                     return file_content
                 except (UnknownObjectException, JSONDecodeError) as e:
                     logger.info(f"Cannot read file contents due to: {e}")
-                    print (f"Cannot read blob contents due to: {e}")
+                    print(f"Cannot read blob contents due to: {e}")
                     return None
         except RateLimitExceededException:
             retry_count += 1
@@ -107,6 +108,7 @@ def _get_blob_content(repo, branch, path_name) -> GitBlob:
         logger.info(f"Cannot find sha for: {path_name} in branch {branch}")
         return None
     return repo.get_git_blob(sha[0])
+
 
 # OCR ver 1
 @dataclass
@@ -145,7 +147,10 @@ class Contract:
     source: str
     pull_request: int
 
-def _process_contracts(file_content: Dict, source: str, pull_request=None) -> List[Dict]:
+
+def _process_contracts(
+    file_content: Dict, source: str, pull_request=None
+) -> List[Dict]:
     """Retrieve contracts data from rdd directory file in json format"""
     contracts = file_content.get("contracts")
     result = []
@@ -157,9 +162,7 @@ def _process_contracts(file_content: Dict, source: str, pull_request=None) -> Li
                 github_name=config.get("name"),
                 status=config.get("status"),
                 contract_version=config.get("contractVersion"),
-                max_gas_price_per_gwei=config.get("billing", {}).get(
-                    "maxGasPriceGwei"
-                ),
+                max_gas_price_per_gwei=config.get("billing", {}).get("maxGasPriceGwei"),
                 micro_link_per_eth=config.get("billing", {}).get("microLinkPerEth"),
                 observation_payment_link_gwei=config.get("billing", {}).get(
                     "observationPaymentLinkGwei"
@@ -189,9 +192,7 @@ def _process_contracts(file_content: Dict, source: str, pull_request=None) -> Li
                 transmission_stage_timeout=config.get("config", {}).get(
                     "transmissionStageTimeout"
                 ),
-                transmission_stages=config.get("config", {}).get(
-                    "transmissionStages"
-                ),
+                transmission_stages=config.get("config", {}).get("transmissionStages"),
                 decimals=config.get("decimals"),
                 marketing_category=config.get("marketing", {}).get("category"),
                 marketing_history=config.get("marketing", {}).get("history"),
@@ -212,7 +213,7 @@ def _process_contracts(file_content: Dict, source: str, pull_request=None) -> Li
 
 repo = _get_repo(GITHUB_REPO)
 commits = repo.get_commits(
-    path=GITHUB_FILE, #sha="1bacd894237084a8343fbc4952c161435937ee96"
+    path=GITHUB_FILE,  # sha="1bacd894237084a8343fbc4952c161435937ee96"
 )  # since last sha INCLUDED
 # returns from the most recent
 commit_list = []
@@ -228,16 +229,19 @@ for commit in commit_list:
     data = _process_contracts(file_content, commit.sha)
     added_contracts = []
     for contract in data:
-        del contract['pull_request']
-        del contract['is_deleted']
-        del contract['source']
-        contract['md5'] = hashlib.md5(json.dumps(contract).encode('utf-8')).hexdigest()
-        contract['commit'] = commit.sha
-        contract['commit_date'] = commit.commit.author.date
+        del contract["pull_request"]
+        del contract["is_deleted"]
+        del contract["source"]
+        contract["md5"] = hashlib.md5(json.dumps(contract).encode("utf-8")).hexdigest()
+        contract["commit"] = commit.sha
+        contract["commit_date"] = commit.commit.author.date
         added_contracts.append(contract)
     result.extend(added_contracts)
 df = pd.DataFrame(result)
-df['next_md5'] = df.sort_values(by=['commit_date'], ascending=True)\
-    .groupby(['address'])['md5'].shift(-1)
+df["next_md5"] = (
+    df.sort_values(by=["commit_date"], ascending=True)
+    .groupby(["address"])["md5"]
+    .shift(-1)
+)
 df = df[df.md5 != df.next_md5]
-df.drop(columns=['next_md5'], inplace=True)
+df.drop(columns=["next_md5"], inplace=True)
