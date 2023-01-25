@@ -98,14 +98,12 @@ def _get_file_content(
             time.sleep(wait_time)
     raise Exception("Retries count exceeded")
 
-
-def _get_blob_content(repo, branch, path_name) -> GitBlob:
+def _get_blob_content(repo, commit, path_name) -> GitBlob:
     """Find blob's sha and fetch its content"""
-    ref = repo.get_git_ref(f"heads/{branch}")
-    tree = repo.get_git_tree(ref.object.sha, recursive="/" in path_name).tree
+    tree = repo.get_git_tree(commit, recursive="/" in path_name).tree
     sha = [x.sha for x in tree if x.path == path_name]
     if not sha:
-        logger.info(f"Cannot find sha for: {path_name} in branch {branch}")
+        logger.info(f"Cannot find sha for: {path_name} for {commit}")
         return None
     return repo.get_git_blob(sha[0])
 
@@ -224,8 +222,9 @@ print(len(commit_list))
 result = []
 for commit in commit_list:
     print(f"Processing commit: {commit.sha}")
+    # commit = repo.get_git_ref(f"heads/{ref}").object.sha
     file_content = _get_file_content(repo, GITHUB_FILE, commit.sha)
-    print(file_content)
+    # print(file_content)
     data = _process_contracts(file_content, commit.sha)
     added_contracts = []
     for contract in data:
